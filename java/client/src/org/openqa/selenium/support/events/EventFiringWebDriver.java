@@ -38,6 +38,7 @@ import org.openqa.selenium.internal.Locatable;
 import org.openqa.selenium.internal.WrapsDriver;
 import org.openqa.selenium.internal.WrapsElement;
 import org.openqa.selenium.logging.Logs;
+import org.openqa.selenium.support.events.internal.EventFiringAction;
 import org.openqa.selenium.support.events.internal.EventFiringKeyboard;
 import org.openqa.selenium.support.events.internal.EventFiringMouse;
 import org.openqa.selenium.support.events.internal.EventFiringTouch;
@@ -79,6 +80,25 @@ public class EventFiringWebDriver implements WebDriver, JavascriptExecutor, Take
               }
               return null;
               } catch (InvocationTargetException e){
+                throw e.getTargetException();
+              }
+            }
+          }
+      );
+  private final List<WebDriverActionEventListener> interactionListeners =
+      new ArrayList<WebDriverActionEventListener>();
+  private final WebDriverActionEventListener interactionDispatcher =
+      (WebDriverActionEventListener) Proxy.newProxyInstance(
+          WebDriverActionEventListener.class.getClassLoader(),
+          new Class[]{WebDriverActionEventListener.class},
+          new InvocationHandler() {
+            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+              try {
+                for (WebDriverActionEventListener interactionListener : interactionListeners) {
+                  method.invoke(interactionListener, args);
+                }
+                return null;
+              } catch (InvocationTargetException e) {
                 throw e.getTargetException();
               }
             }
@@ -142,6 +162,22 @@ public class EventFiringWebDriver implements WebDriver, JavascriptExecutor, Take
    */
   public EventFiringWebDriver unregister(WebDriverEventListener eventListener) {
     eventListeners.remove(eventListener);
+    return this;
+  }
+
+  /**
+   * @return this for method chaining.
+   */
+  public EventFiringWebDriver register(WebDriverActionEventListener actionListener) {
+    interactionListeners.add(actionListener);
+    return this;
+  }
+
+  /**
+   * @return this for method chaining.
+   */
+  public EventFiringWebDriver unregister(WebDriverActionEventListener actionListener) {
+    interactionListeners.remove(actionListener);
     return this;
   }
 
@@ -288,7 +324,11 @@ public class EventFiringWebDriver implements WebDriver, JavascriptExecutor, Take
 
   public Keyboard getKeyboard() {
     if (driver instanceof HasInputDevices) {
-      return new EventFiringKeyboard(driver, dispatcher);
+      if (interactionListeners.isEmpty()) {
+        return new EventFiringKeyboard(driver, dispatcher);
+      } else {
+        return new EventFiringAction(driver, interactionDispatcher);
+      }
     } else {
       throw new UnsupportedOperationException("Underlying driver does not implement advanced"
           + " user interactions yet.");
@@ -297,7 +337,12 @@ public class EventFiringWebDriver implements WebDriver, JavascriptExecutor, Take
 
   public Mouse getMouse() {
     if (driver instanceof HasInputDevices) {
-      return new EventFiringMouse(driver, dispatcher);
+      if (interactionListeners.isEmpty()) {
+        return new EventFiringMouse(driver, dispatcher);
+      } else {
+        return new EventFiringAction(driver, interactionDispatcher);
+      }
+
     } else {
       throw new UnsupportedOperationException("Underlying driver does not implement advanced"
           + " user interactions yet.");
