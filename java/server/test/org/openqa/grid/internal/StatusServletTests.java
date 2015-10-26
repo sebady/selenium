@@ -370,6 +370,28 @@ public class StatusServletTests {
   }
 
   @Test
+  public void testHubPostSlotCounts() throws IOException {
+    HttpClient client = httpClientFactory.getHttpClient();
+
+    BasicHttpEntityEnclosingRequest r =
+      new BasicHttpEntityEnclosingRequest("POST", hubApi.toExternalForm());
+
+    JsonObject j = new JsonObject();
+
+    JsonArray keys = new JsonArray();
+    keys.add(new JsonPrimitive("slotCounts"));
+
+    j.add("configuration", keys);
+    r.setEntity(new StringEntity(j.toString()));
+
+    HttpResponse response = client.execute(host, r);
+    assertEquals(200, response.getStatusLine().getStatusCode());
+    JsonObject slotCounts =  extractObject(response).get("slotCounts").getAsJsonObject();
+    assertEquals(4, slotCounts.get("free").getAsInt());
+    assertEquals(5, slotCounts.get("total").getAsInt());
+  }
+
+  @Test
   public void testSessionApiNeg() throws IOException {
     String s = "non-existing session";
     HttpClient client = httpClientFactory.getHttpClient();
